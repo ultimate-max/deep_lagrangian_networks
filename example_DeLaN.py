@@ -41,6 +41,7 @@ if __name__ == "__main__":
 
     print("\n\n################################################")
     print("Characters:")
+    # 数字 `0` 表示：使用 `.format()` 中&#x7684;__&#x7B2C;0个参数__（即第一个参数）
     print("   Test Characters = {0}".format(test_labels))
     print("  Train Characters = {0}".format(train_labels))
     print("# Training Samples = {0:05d}".format(int(train_qp.shape[0])))
@@ -76,6 +77,7 @@ if __name__ == "__main__":
 
     else:
         # Construct DeLaN:
+        # 字典解包语法：将字典 `hyper` 中的键值对作为关键字参数传递给 `DeepLagrangianNetwork` 的构造函数
         delan_model = DeepLagrangianNetwork(n_dof, **hyper)
         delan_model = delan_model.cuda() if cuda else delan_model.cpu()
 

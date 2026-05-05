@@ -15,4 +15,5 @@ setup(
     classifiers=['Development Status :: 3 - Alpha'], install_requires=['matplotlib',
                                                                        'numpy',
                                                                        'torch',
-                                                                       'dill'])
+                                                                       'dill',
+                                                                       'pyyaml'])

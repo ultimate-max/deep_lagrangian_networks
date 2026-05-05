@@ -106,6 +106,80 @@ python ./example_DeLaN.py -l 1
 python ./jax_example_DeLaN.py -l 1
 ```
 
+**Troubleshooting:** \
+
+### Common Issue 1: pip dependency conflict with pyyaml
+
+**Error:**
+```
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. 
+launch-ros 0.19.13 requires pyyaml, which is not installed.
+```
+
+**Solution:**
+The `pyyaml` package is missing from the dependencies. It has been added to both `requirements-cpu.txt` and `setup.py`. 
+
+To fix:
+```bash
+# If using requirements file
+pip install -r requirements-cpu.txt
+
+# Or install pyyaml directly
+pip install pyyaml
+```
+
+### Common Issue 2: PyTorch CUDA import error
+
+**Error:**
+```
+ImportError: /path/to/torch/lib/../../nvidia/cusparse/lib/libcusparse.so.12: undefined symbol: __nvJitLinkComplete_12_4
+```
+
+**Root Cause:**
+This error occurs when there's a version mismatch between CUDA libraries installed via conda and pip. The error typically happens when:
+- PyTorch was installed via pip with CUDA dependencies
+- But the conda environment has different CUDA library versions installed
+- This creates library conflicts during import
+
+**Solution (if you want to use GPU):**
+
+**Step 1: Uninstall pip-installed PyTorch**
+```bash
+pip uninstall -y torch torchvision torchaudio
+```
+
+**Step 2: Reinstall PyTorch via conda for better CUDA compatibility**
+```bash
+conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
+```
+
+**Note:** Adjust the CUDA version (12.1) to match your system's CUDA toolkit version. Check with:
+```bash
+nvcc --version
+```
+
+**Step 3: Verify installation**
+```bash
+python -c "import torch; print(f'PyTorch version: {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}'); print(f'GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"N/A\"}')"
+```
+
+**Alternative Solution (if you encounter Intel MKL conflicts):**
+
+If you see an error like `undefined symbol: iJIT_NotifyEvent`, it indicates an Intel MKL library conflict. You can either:
+
+**Option A: Use CPU-only PyTorch**
+```bash
+conda install pytorch torchvision torchaudio cpuonly -c pytorch
+```
+
+**Option B: Troubleshoot MKL conflicts** (advanced)
+This may require reinstalling Intel MKL packages or adjusting environment variables. The CPU-only version is recommended for most use cases if GPU is not critical.
+
+**Verification:**
+```bash
+python ./example_DeLaN.py
+```
+
 **Citation:** \
 If you use this implementation within your paper, please cite:
 
@@ -136,4 +210,3 @@ If you use this implementation within your paper, please cite:
 **Contact:** \
 If you have any further questions or suggestions, feel free to reach out to me via
 ```michael AT robot-learning DOT de```
-
