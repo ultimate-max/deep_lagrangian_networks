@@ -106,7 +106,7 @@ python ./example_DeLaN.py -l 1
 python ./jax_example_DeLaN.py -l 1
 ```
 
-**Troubleshooting:** \
+**Troubleshooting:** 
 
 ### Common Issue 1: pip dependency conflict with pyyaml
 
