@@ -34,10 +34,11 @@ if __name__ == "__main__":
     seed, cuda, render, load_model, save_model = init_env(parser.parse_args())
 
     # Read the dataset:
-    n_dof = 2
     train_data, test_data, divider, dt_mean = load_dataset()
     train_labels, train_qp, train_qv, train_qa, train_p, train_pd, train_tau = train_data
     test_labels, test_qp, test_qv, test_qa, test_p, test_pd, test_tau, test_m, test_c, test_g = test_data
+    n_dof = train_qp.shape[-1]
+    assert test_qp.shape[-1] == n_dof, "训练集与测试集关节维不一致"
 
     print("\n\n################################################")
     print("Characters:")
@@ -52,17 +53,17 @@ if __name__ == "__main__":
     print("Training Deep Lagrangian Networks (DeLaN):")
 
     # Construct Hyperparameters:
-    hyper = {'n_width': 64,
-             'n_depth': 2,
-             'diagonal_epsilon': 0.01,
-             'activation': 'SoftPlus',
-             'b_init': 1.e-4,
-             'b_diag_init': 0.001,
+    hyper = {'n_width': 128, # 隐藏层宽度
+             'n_depth': 16, # 隐藏层深度
+             'diagonal_epsilon': 0.01, # 对角线扰动
+             'activation': 'SoftPlus', # 激活函数
+             'b_init': 1.e-2,
+             'b_diag_init': 0.01,
              'w_init': 'xavier_normal',
              'gain_hidden': np.sqrt(2.),
              'gain_output': 0.1,
              'n_minibatch': 512,
-             'learning_rate': 5.e-04,
+             'learning_rate': 5.e-03,
              'weight_decay': 1.e-5,
              'max_epoch': 10000}
 
@@ -116,7 +117,10 @@ if __name__ == "__main__":
             l_var_inv_dyn = torch.var(err_inv)
 
             # Compute the loss of the Power Conservation:
-            dEdt = torch.matmul(qd.view(-1, 2, 1).transpose(dim0=1, dim1=2), tau.view(-1, 2, 1)).view(-1)
+            dEdt = torch.matmul(
+                qd.view(-1, n_dof, 1).transpose(dim0=1, dim1=2),
+                tau.view(-1, n_dof, 1),
+            ).view(-1)
             err_dEdt = (dEdt_hat - dEdt) ** 2
             l_mean_dEdt = torch.mean(err_dEdt)
             l_var_dEdt = torch.var(err_dEdt)

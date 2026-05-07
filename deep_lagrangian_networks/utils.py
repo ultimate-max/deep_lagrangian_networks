@@ -3,6 +3,8 @@
 包含环境初始化、数据加载、参数处理等辅助函数
 """
 
+import sys
+
 import dill as pickle  # 使用dill库代替标准pickle，支持更多Python对象
 import numpy as np  # NumPy：数值计算库，用于数组操作
 import torch  # PyTorch：深度学习框架
@@ -74,7 +76,9 @@ def load_dataset(n_characters=3, filename="data/character_data.pickle", test_lab
     参数:
         n_characters: 测试集中包含的字符数量（未使用，保留参数）
         filename: 数据文件路径，pickle格式
-        test_label: 用作测试集的字符标签列表，例如 ("e", "q", "v")
+        test_label: 用作测试集的字符标签元组，例如 ("e", "q", "v")。
+            若某标签不在数据集中会忽略并打印警告；若最终一个都匹配不到，则
+            将全部轨迹同时放入训练集与测试集（脚本可运行，但不再有留出泛化）。
     
     返回:
         train_data: 训练数据元组
@@ -94,6 +98,8 @@ def load_dataset(n_characters=3, filename="data/character_data.pickle", test_lab
         g (gravity): 重力
         p (momentum): 动量
         pdot (momentum dot): 动量的时间导数
+
+    自由度 n_dof 由每条轨迹 qp 的列数推断（所有轨迹必须相同）。
     """
 
     # 从pickle文件中加载数据
@@ -101,18 +107,46 @@ def load_dataset(n_characters=3, filename="data/character_data.pickle", test_lab
     with open(filename, 'rb') as f:
         data = pickle.load(f)
 
-    # 自由度（degrees of freedom）数量，2表示2个关节的机械臂
-    n_dof = 2
+    # 从数据推断关节维；各轨迹必须一致
+    n_dof = int(np.asarray(data["qp"][0]).shape[1])
+    for i in range(len(data["labels"])):
+        d_i = int(np.asarray(data["qp"][i]).shape[1])
+        if d_i != n_dof:
+            raise ValueError(
+                f"数据集中各轨迹 n_dof 不一致: 轨迹0为{n_dof}，轨迹{i}为{d_i}"
+            )
 
     # 将数据集分割为训练集和测试集
 
     # 方法1: 随机选择测试集（未使用）
     # test_idx = np.random.choice(len(data["labels"]), n_characters, replace=False)
 
-    # 方法2: 指定特定字符作为测试集（当前使用的方法）
-    # 从所有标签中找到测试字符的索引位置
-    # 例如：如果test_label=("e", "q", "v")，则找到字符"e"、"q"、"v"在数据中的位置
-    test_idx = [data["labels"].index(x) for x in test_label]
+    # 方法2: 指定特定字符作为测试集；跳过 pickle 里不存在的标签
+    labels_all = data["labels"]
+    test_idx = []
+    missing = []
+    for x in test_label:
+        if x in labels_all:
+            ix = labels_all.index(x)
+            if ix not in test_idx:
+                test_idx.append(ix)
+        else:
+            missing.append(x)
+    if missing:
+        print(
+            "load_dataset 警告: 以下标签不在数据中，已从测试划分中忽略: "
+            f"{missing}",
+            file=sys.stderr,
+        )
+    use_full_overlap = False
+    if not test_idx:
+        print(
+            "load_dataset 警告: 无任何请求的测试标签存在于数据中；"
+            "将全部轨迹同时划入训练集与测试集（训练仍可运行，但不是留出字符泛化）。",
+            file=sys.stderr,
+        )
+        test_idx = list(range(len(labels_all)))
+        use_full_overlap = True
 
     # 计算所有测试轨迹的时间步长（相邻时间点的差值）
     # data["t"]: 时间数组
@@ -146,7 +180,10 @@ def load_dataset(n_characters=3, filename="data/character_data.pickle", test_lab
     # 遍历所有字符轨迹
     for i in range(len(data["labels"])):
 
-        if i in test_idx:  # 如果当前字符在测试集中
+        in_test = i in test_idx
+        in_train = use_full_overlap or (i not in test_idx)
+
+        if in_test:  # 如果当前字符在测试集中
             # 将测试数据添加到测试集数组
             test_labels.append(data["labels"][i])
             
@@ -168,7 +205,7 @@ def load_dataset(n_characters=3, filename="data/character_data.pickle", test_lab
             # test_qp.shape[0]：总行数（数据长度）
             divider.append(test_qp.shape[0])
 
-        else:  # 如果当前字符在训练集中
+        if in_train:  # 训练集：留出划分；或与测试集完全重叠（use_full_overlap）
             # 将训练数据添加到训练集数组
             train_labels.append(data["labels"][i])
             train_qp = np.vstack((train_qp, data["qp"][i]))
@@ -178,6 +215,20 @@ def load_dataset(n_characters=3, filename="data/character_data.pickle", test_lab
 
             train_p = np.vstack((train_p, data["p"][i]))
             train_pd = np.vstack((train_pd, data["pdot"][i]))
+
+    if len(train_labels) == 0 and test_qp.shape[0] > 0:
+        print(
+            "load_dataset 警告: 训练集为空（例如仅指定了测试标签且数据只有这些轨迹）。"
+            "已把测试集内容复制到训练集以便能训练。",
+            file=sys.stderr,
+        )
+        train_labels = list(test_labels)
+        train_qp = np.array(test_qp, copy=True)
+        train_qv = np.array(test_qv, copy=True)
+        train_qa = np.array(test_qa, copy=True)
+        train_tau = np.array(test_tau, copy=True)
+        train_p = np.array(test_p, copy=True)
+        train_pd = np.array(test_pd, copy=True)
 
     # 返回三个值：训练数据、测试数据、分隔数组、平均时间步长
     return (train_labels, train_qp, train_qv, train_qa, train_p, train_pd, train_tau), \
